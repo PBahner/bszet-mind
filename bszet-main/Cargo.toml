@@ -1,0 +1,8 @@
+[package]
+name = "bszet-main"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.24", default-features = false, features = ["macros", "rt-multi-thread"] }
+bszet-davinci = { path = "../bszet-davinci" }
