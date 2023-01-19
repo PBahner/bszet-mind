@@ -1,16 +1,15 @@
 use crate::Davinci;
 
 #[tokio::test]
-async fn test_load() {
+async fn test_load() -> anyhow::Result<()> {
   let mut davinci = Davinci::new(
-    "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy".parse().unwrap(),
+    "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/".parse().unwrap(),
     "".to_string(),
     "".to_string(),
   );
 
-  println!("{}", davinci.update().await.unwrap());
-
-  println!("{}", &davinci.data.as_ref().unwrap().last_checked);
+  assert_eq!(true, davinci.update().await?);
+  assert_eq!(false, davinci.update().await?);
 
   for table in &davinci.data.unwrap().tables {
     println!("{}:", table.date);
@@ -19,4 +18,6 @@ async fn test_load() {
       println!("- {:?}", row);
     }
   }
+
+  Ok(())
 }

@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "bszet-davinci",
-    "bszet-main"
+    "bszet-main",
+    "bszet-notify"
 ]
