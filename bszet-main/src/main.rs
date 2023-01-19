@@ -12,7 +12,7 @@ use crate::ascii::table;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   let mut davinci = Davinci::new(
-    "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/".parse()?,
+    "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/V_DC_001.html".parse()?,
     "".to_string(),
     "".to_string(),
   );
