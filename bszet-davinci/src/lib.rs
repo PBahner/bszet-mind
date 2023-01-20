@@ -1,6 +1,5 @@
 extern crate core;
 
-use std::ops::Sub;
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -12,13 +11,13 @@ use select::document::Document;
 use select::predicate::Name;
 use time::{Date, Month, OffsetDateTime};
 use time::format_description::well_known::Rfc2822;
-use tokio::io::AsyncBufReadExt;
 
 use crate::timetable::{Lesson, Subject};
 use crate::timetable::igd21::IGD21;
 
 const OVERVIEW_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("V_DC_(\\d{3}).html").unwrap());
 const DATE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("\\S+ (\\d{2})\\.(\\d{2})\\.(\\d{4})").unwrap());
+const REPLACEMENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("\\+(.*) \\((.+)\\)").unwrap());
 
 #[cfg(test)]
 mod test;
@@ -55,47 +54,59 @@ impl Davinci {
   pub fn apply_changes(&self, date: Date) -> Vec<Lesson> {
     let mut day = IGD21.get(&date.weekday()).unwrap().clone();
 
-
     if let Some(data) = &self.data {
       for row in &data.rows {
-        if row.date != date {
+        if row.date != date || !row.class.contains(&"IGD21".to_string()) {
           continue;
         }
 
-        if row.class.contains(&"IGD21".to_string()) {
-          for mut lesson in &mut day {
-            if lesson.lesson == row.lesson {
-              // match &row.change {
-              //   Cancel => {
-              //     lesson.subject = Subject::Cancel(Box::new(lesson.subject.clone()));
-              //   }
-              //   PlaceChange => {
-              //     lesson.place = row.place.clone();
-              //   }
-              //   Addition => {
-              //     day.push(Lesson {
-              //       lesson: row.lesson,
-              //       subject: row.subject.clone(),
-              //       iteration: None,
-              //       place: row.place.clone(),
-              //       notice: row.notice.clone(),
-              //     });
-              //   }
-              //   Other(other) => {
-              //     lesson.notice = Some(match &row.notice {
-              //       None => other.to_string(),
-              //       Some(notice) => format!("{} - {}", other, notice),
-              //     });
-              //   }
-              // }
-              break;
+        for mut lesson in &mut day {
+          if lesson.lesson == row.lesson {
+            match &row.change {
+              Change::Cancel { subject, teacher, place } => {
+                if &lesson.subject != subject { continue; };
+                // sanity checks??
+                lesson.subject = Subject::Cancel(Box::new(lesson.subject.clone()));
+                lesson.notice = row.notice.clone();
+              }
+              Change::PlaceChange { subject, teacher, place } => {
+                if &lesson.subject != subject { continue; };
+                // sanity checks?? place.from
+                lesson.place = place.to.clone();
+                lesson.notice = row.notice.clone();
+              }
+              Change::Addition { subject, teacher, place } => {
+                day.push(Lesson {
+                  lesson: row.lesson,
+                  subject: subject.clone(),
+                  iteration: None,
+                  place: place.clone(),
+                  notice: row.notice.clone(),
+                });
+              }
+              Change::Replacement { subject, teacher, place } => {
+                if lesson.subject != subject.from { continue; };
+                // sanity checks?? place.from
+
+                lesson.subject = subject.to.clone();
+                lesson.place = place.to.clone();
+                lesson.notice = row.notice.clone();
+              }
+              Change::Other { value, subject, teacher, place } => {
+                lesson.notice = Some(match &row.notice {
+                  None => format!("Other: {}", value.to_string()),
+                  Some(notice) => format!("Other: {} - {}", value, notice),
+                });
+              }
             }
+            break;
           }
         }
 
         break;
       }
     }
+
 
     day
   }
@@ -180,7 +191,7 @@ impl Davinci {
 
       let class = if columns[0].is_empty() { None } else { Some(columns[0].split(',').map(|value| value.trim().to_string()).collect::<Vec<String>>()) };
       let lesson = if columns[1].is_empty() { None } else { Some(u8::from_str(&columns[1][..columns[1].len() - 1]).unwrap()) };
-      let change = Change::new(&columns[5], Subject::from(columns[2].as_str()), columns[3].to_string(), columns[4].to_string());
+      let change = Change::new(&columns[5], columns[2].as_str(), columns[3].to_string(), columns[4].to_string())?;
       let notice = if columns[6].is_empty() { None } else { Some(columns[6].to_string()) };
 
       let row = if let Some(last) = rows.last() {
@@ -236,12 +247,17 @@ pub enum Change {
   PlaceChange {
     subject: Subject,
     teacher: String,
-    place: String,
+    place: Replacement<String>,
   },
   Addition {
     subject: Subject,
     teacher: String,
     place: String,
+  },
+  Replacement {
+    subject: Replacement<Subject>,
+    place: Replacement<String>,
+    teacher: Replacement<String>,
   },
   Other {
     value: String,
@@ -251,13 +267,40 @@ pub enum Change {
   },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Replacement<T> {
+  pub from: T,
+  pub to: T,
+}
+
 impl Change {
-  fn new(value: &str, subject: Subject, place: String, teacher: String) -> Self {
-    match value {
-      "Fällt aus" => Self::Cancel { subject, place, teacher },
-      "Raumänderung" => Self::PlaceChange { subject, place, teacher },
-      "Zusatzunterricht" => Self::Addition { subject, place, teacher },
-      value => Self::Other { value: value.to_string(), subject, place, teacher }
+  fn new(value: &str, subject: &str, place: String, teacher: String) -> anyhow::Result<Self> {
+    Ok(match value {
+      "Fällt aus" => Self::Cancel { subject: subject.into(), place, teacher: teacher[1..teacher.len() - 1].to_string() },
+      "Raumänderung" => Self::PlaceChange { subject: subject.into(), place: place.as_str().try_into()?, teacher },
+      "Zusatzunterricht" => Self::Addition { subject: subject.into(), place, teacher },
+      "Vertreten" => Self::Replacement { subject: subject.try_into()?, place: place.as_str().try_into()?, teacher: teacher.as_str().try_into()? },
+      value => Self::Other { value: value.to_string(), subject: subject.into(), place, teacher }
+    })
+  }
+}
+
+impl TryFrom<&str> for Replacement<String> {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    match REPLACEMENT_REGEX.captures(value).map(|capture| (capture.get(1), capture.get(2))) {
+      Some((Some(to), Some(from))) => Ok(Replacement { from: from.as_str().to_string(), to: to.as_str().to_string() }),
+      _ => Err(anyhow!("can not parse replacement {}", value)),
     }
+  }
+}
+
+impl TryFrom<&str> for Replacement<Subject> {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    let replacement: Replacement<String> = TryFrom::try_from(value)?;
+    Ok(Replacement { from: Subject::from(replacement.from.as_str()), to: Subject::from(replacement.to.as_str()) })
   }
 }

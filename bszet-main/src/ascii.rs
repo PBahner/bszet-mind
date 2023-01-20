@@ -3,9 +3,6 @@ use std::fmt::Write;
 use bszet_davinci::timetable::Lesson;
 
 pub fn table(day: Vec<Lesson>) -> String {
-
-  // 1. FRZ A102
-
   let mut lessonW = 0;
   let mut subjectW = 0;
   let mut placeW = 0;
@@ -35,7 +32,11 @@ pub fn table(day: Vec<Lesson>) -> String {
       writeln!(out).unwrap();
     }
 
-    write!(out, "{}{} {}{} {}", l, " ".repeat(lessonW - l.len()), s, " ".repeat(subjectW - s.len()), p).unwrap();
+    if let Some(notice) = &lesson.notice {
+      write!(out, "{}{} {}{} {}{} {}", l, " ".repeat(lessonW - l.len()), s, " ".repeat(subjectW - s.len()), p, " ".repeat(placeW - p.len()), notice).unwrap();
+    } else {
+      write!(out, "{}{} {}{} {}", l, " ".repeat(lessonW - l.len()), s, " ".repeat(subjectW - s.len()), p).unwrap();
+    }
   }
 
   out

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter, Pointer, Write};
-use std::str::FromStr;
+use std::fmt::{Debug, Display, Formatter, Write};
 
 use time::Weekday;
 
