@@ -8,14 +8,14 @@ async fn test_load() -> anyhow::Result<()> {
     "".to_string(),
   );
 
-  println!("{:?}", davinci.update().await?);
+    println!("{:?}", davinci.update().await?);
 
-  // assert_eq!(true, davinci.update().await?);
-  // assert_eq!(false, davinci.update().await?);
+    // assert_eq!(true, davinci.update().await?);
+    // assert_eq!(false, davinci.update().await?);
 
-  for row in &davinci.data().unwrap().rows {
-    println!("- {:?}", row);
-  }
+    for row in &davinci.data().unwrap().rows {
+        println!("- {:?}", row);
+    }
 
-  Ok(())
+    Ok(())
 }
