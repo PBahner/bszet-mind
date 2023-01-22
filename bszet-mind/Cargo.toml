@@ -1,0 +1,15 @@
+[package]
+name = "bszet-main"
+description = "A tool to monitor STÜBER SYSTEMS' DAVINCI's HTML exported substitution plan for changes."
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.24", default-features = false, features = ["macros", "rt-multi-thread"] }
+reqwest = { version = "0.11", default-features = false }
+clap = { version = "4.1", features = ["derive", "env"] }
+axum = { version = "0.6", default-features = false }
+bszet-davinci = { path = "../bszet-davinci" }
+bszet-notify = { path = "../bszet-notify" }
+anyhow = "1.0"
+time = "0.3"
