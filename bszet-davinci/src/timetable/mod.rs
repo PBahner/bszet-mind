@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter, Write};
 
 use time::Weekday;
+use tracing::warn;
 
 pub mod igd21;
 
@@ -10,7 +11,7 @@ pub struct Lesson {
   pub lesson: u8,
   pub subject: Subject,
   pub iteration: Option<u8>,
-  pub place: String,
+  pub place: Option<String>,
   pub notice: Option<String>,
 }
 
@@ -21,6 +22,7 @@ type Timetable = HashMap<Weekday, Day>;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Subject {
   GermanBasic,
+  GermanAdvanced,
   MathBasic,
   MathAdvanced,
   EnglishBasic,
@@ -41,6 +43,9 @@ pub enum Subject {
   Lf10,
   Lf11,
 
+  FaeVerb,
+  None,
+
   Cancel(Box<Subject>),
   Other(String),
 }
@@ -49,16 +54,17 @@ impl From<&str> for Subject {
   fn from(value: &str) -> Self {
     match value {
       "GK-DEU" => Self::GermanBasic,
+      "LK-DEU" => Self::GermanAdvanced,
       "GK-MA" => Self::MathBasic,
-      "LK-Ma" => Self::MathAdvanced,
+      "LK-MA" => Self::MathAdvanced,
       "GK-ENG" => Self::EnglishBasic,
       "LK-ENG" => Self::EnglishAdvanced,
       "BK" => Self::Art,
-      "GE/GGK" => Self::History,
-      "FR" => Self::French,
+      "GGK" => Self::History,
+      "F-B" => Self::French,
       "DEU" => Self::GermanBasic,
       "ETH" => Self::Ethics,
-      "RU" => Self::Russian,
+      "R-B" => Self::Russian,
       "CH" => Self::Chemistry,
       "PH" => Self::Physics,
       "SP" => Self::PhysicalEducation,
@@ -69,7 +75,9 @@ impl From<&str> for Subject {
       "LF 10" => Self::Lf10,
       "LF 11" => Self::Lf11,
 
-      other => Self::Other(other.to_string()),
+      "_fä.verb." => Self::FaeVerb,
+"" => Self::None,
+      other =>         Self::Other(other.to_string())
     }
   }
 }
@@ -77,30 +85,36 @@ impl From<&str> for Subject {
 impl Display for Subject {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      Subject::GermanBasic => f.write_str("D"),
-      Subject::MathBasic => f.write_str("GK-Ma"),
-      Subject::MathAdvanced => f.write_str("LK-Ma"),
-      Subject::EnglishBasic => f.write_str("GK-En"),
-      Subject::EnglishAdvanced => f.write_str("LK-En"),
-      Subject::Art => f.write_str("BK"),
-      Subject::History => f.write_str("Ge"),
-      Subject::French => f.write_str("Frz"),
-      Subject::Ethics => f.write_str("Eth"),
-      Subject::Russian => f.write_str("Ru"),
-      Subject::Chemistry => f.write_str("Ch"),
-      Subject::Physics => f.write_str("Ph"),
-      Subject::PhysicalEducation => f.write_str("Sp"),
-      Subject::Literature => f.write_str("Lit"),
-      Subject::Lf6_7_9 => f.write_str("LF 6+7+9"),
-      Subject::Lf8 => f.write_str("LF 8"),
-      Subject::Lf10 => f.write_str("LF 10"),
-      Subject::Lf11 => f.write_str("LF 11"),
-      Subject::Cancel(inner) => {
+      Self::GermanBasic => f.write_str("GK-D"),
+      Self::GermanAdvanced => f.write_str("LK-D"),
+      Self::MathBasic => f.write_str("GK-Ma"),
+      Self::MathAdvanced => f.write_str("LK-Ma"),
+      Self::EnglishBasic => f.write_str("GK-En"),
+      Self::EnglishAdvanced => f.write_str("LK-En"),
+      Self::Art => f.write_str("BK"),
+      Self::History => f.write_str("Ge"),
+      Self::French => f.write_str("Frz"),
+      Self::Ethics => f.write_str("Eth"),
+      Self::Russian => f.write_str("Ru"),
+      Self::Chemistry => f.write_str("Ch"),
+      Self::Physics => f.write_str("Ph"),
+      Self::PhysicalEducation => f.write_str("Sp"),
+      Self::Literature => f.write_str("Lit"),
+      Self::Lf6_7_9 => f.write_str("LF 6+7+9"),
+      Self::Lf8 => f.write_str("LF 8"),
+      Self::Lf10 => f.write_str("LF 10"),
+      Self::Lf11 => f.write_str("LF 11"),
+      Self::FaeVerb => f.write_str("Fä-Verb"),
+      Self::None => f.write_str("None"),
+      Self::Cancel(inner) => {
         f.write_char('(')?;
         Display::fmt(inner, f)?;
         f.write_char(')')
-      } // TODO: don't create a new formatter
-      Subject::Other(other) => f.write_str(other),
+      }
+      Self::Other(other) => {
+        warn!("Unknown subject: {}", other);
+        f.write_str(other)
+      },
     }
   }
 }
@@ -111,7 +125,7 @@ impl Lesson {
       lesson,
       iteration,
       subject,
-      place,
+      place: Some(place),
       notice: None,
     }
   }

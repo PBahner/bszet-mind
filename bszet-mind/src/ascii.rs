@@ -14,7 +14,7 @@ pub fn table(day: Vec<Lesson>) -> String {
 
     lesson_w = lesson_w.max(l.len());
     subject_w = subject_w.max(s.len());
-    place_w = place_w.max(p.len());
+    place_w = place_w.max(p.as_ref().map(|s| s.len()).unwrap_or(0));
   }
 
   let mut out = String::with_capacity(day.len() * (lesson_w + subject_w + place_w + 2));
@@ -40,8 +40,8 @@ pub fn table(day: Vec<Lesson>) -> String {
         " ".repeat(lesson_w - l.len()),
         s,
         " ".repeat(subject_w - s.len()),
-        p,
-        " ".repeat(place_w - p.len()),
+        p.as_ref().unwrap_or(&"".to_string()),
+        " ".repeat(place_w - p.as_ref().map(|s|s.len()).unwrap_or(0)),
         notice
       )
       .unwrap();
@@ -53,7 +53,7 @@ pub fn table(day: Vec<Lesson>) -> String {
         " ".repeat(lesson_w - l.len()),
         s,
         " ".repeat(subject_w - s.len()),
-        p
+        p.as_ref().unwrap_or(&"".to_string())
       )
       .unwrap();
     }

@@ -5,21 +5,20 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use reqwest::header::LAST_MODIFIED;
 use reqwest::{Client, Url};
+use reqwest::header::LAST_MODIFIED;
 use select::document::Document;
 use select::predicate::Name;
-use time::format_description::well_known::Rfc2822;
 use time::{Date, Month, OffsetDateTime};
+use time::format_description::well_known::Rfc2822;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
 use crate::iteration::get_iteration;
-use crate::timetable::igd21::IGD21;
 use crate::timetable::{Lesson, Subject};
+use crate::timetable::igd21::IGD21;
 
-const DATE_REGEX: Lazy<Regex> =
-  Lazy::new(|| Regex::new("\\S+ (\\d{2})\\.(\\d{2})\\.(\\d{4})").unwrap());
+const DATE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("\\S+ (\\d{2})\\.(\\d{2})\\.(\\d{4})").unwrap());
 const REPLACEMENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("\\+(.*) \\((.+)\\)").unwrap());
 
 mod iteration;
@@ -78,14 +77,20 @@ impl Davinci {
 
     if let Some(data) = self.data.read().await.as_ref() {
       for row in &data.rows {
-        if row.date != date || !row.class.contains(&"IGD21".to_string()) {
+        if row.date != date || !(row.class.contains(&"IGD21".to_string()) || row.class.contains(&"IGD 21".to_string())) {
           continue;
         }
+
+        println!("{:?}", row);
 
         for mut lesson in &mut day {
           if lesson.lesson == row.lesson {
             match &row.change {
               Change::Cancel {
+                subject,
+                teacher,
+                place,
+              } | Change::ClassIsMissing {
                 subject,
                 teacher,
                 place,
@@ -106,7 +111,7 @@ impl Davinci {
                   continue;
                 };
                 // sanity checks?? place.from
-                lesson.place = place.to.clone();
+                lesson.place = Some(place.to.clone());
                 lesson.notice = row.notice.clone();
               }
               Change::Addition {
@@ -133,7 +138,7 @@ impl Davinci {
                 // sanity checks?? place.from
 
                 lesson.subject = subject.to.clone();
-                lesson.place = place.to.clone();
+                lesson.place = Some(place.to.clone());
                 lesson.notice = row.notice.clone();
               }
               Change::Other {
@@ -242,7 +247,7 @@ impl Davinci {
         .find(Name("td"))
         .map(|data| {
           let text = data.text();
-          let column = text.trim();
+          let column = clean(&text);
           column.to_string()
         })
         .collect::<Vec<String>>();
@@ -261,16 +266,18 @@ impl Davinci {
             .collect::<Vec<String>>(),
         )
       };
+
       let lesson = if columns[1].is_empty() {
         None
       } else {
-        Some(u8::from_str(&columns[1][..columns[1].len() - 1]).unwrap())
+        Some(convert_lesson(u8::from_str(&columns[1][..columns[1].len() - 1]).unwrap()))
       };
+
       let change = Change::new(
         &columns[5],
         columns[2].as_str(),
         columns[3].to_string(),
-        columns[4].to_string(),
+        &columns[4],
       )?;
       let notice = if columns[6].is_empty() {
         None
@@ -327,28 +334,33 @@ pub struct Row {
 pub enum Change {
   Cancel {
     subject: Subject,
-    teacher: String,
+    teacher: Vec<String>,
     place: String,
   },
   PlaceChange {
     subject: Subject,
-    teacher: String,
+    teacher: Vec<String>,
     place: Replacement<String>,
   },
   Addition {
     subject: Subject,
-    teacher: String,
-    place: String,
+    teacher: Vec<String>,
+    place: Option<String>,
   },
   Replacement {
     subject: Replacement<Subject>,
+    teacher: Replacement<Vec<String>>,
     place: Replacement<String>,
-    teacher: Replacement<String>,
+  },
+  ClassIsMissing {
+    subject: Subject,
+    teacher: Vec<String>,
+    place: String,
   },
   Other {
     value: String,
     subject: Subject,
-    teacher: String,
+    teacher: Vec<String>,
     place: String,
   },
 }
@@ -360,33 +372,38 @@ pub struct Replacement<T> {
 }
 
 impl Change {
-  fn new(value: &str, subject: &str, place: String, teacher: String) -> anyhow::Result<Self> {
+  fn new(value: &str, subject: &str, place: String, teacher: &str) -> anyhow::Result<Self> {
     Ok(match value {
       "Fällt aus" => Self::Cancel {
         subject: subject.into(),
         place,
-        teacher: teacher[1..teacher.len() - 1].to_string(),
+        teacher: teacher.split(',').map(|s| s.trim().to_string()).collect::<Vec<String>>(),
       },
       "Raumänderung" => Self::PlaceChange {
         subject: subject.into(),
         place: place.as_str().try_into()?,
-        teacher,
+        teacher: teacher.split(',').map(|s| s.trim().to_string()).collect::<Vec<String>>(),
       },
       "Zusatzunterricht" => Self::Addition {
         subject: subject.into(),
-        place,
-        teacher,
+        place: if place.is_empty() { None } else { Some(place) },
+        teacher: teacher.split(',').map(|s| s.trim().to_string()).collect::<Vec<String>>(),
       },
       "Vertreten" => Self::Replacement {
         subject: subject.try_into()?,
         place: place.as_str().try_into()?,
-        teacher: teacher.as_str().try_into()?,
+        teacher: teacher.try_into()?,
+      },
+      "Klasse fehlt" => Self::ClassIsMissing {
+        subject: subject.into(),
+        place,
+        teacher: teacher.split(',').map(|s| s.trim().to_string()).collect::<Vec<String>>(),
       },
       value => Self::Other {
         value: value.to_string(),
         subject: subject.into(),
         place,
-        teacher,
+        teacher: teacher.split(',').map(|s| s.trim().to_string()).collect::<Vec<String>>(),
       },
     })
   }
@@ -419,4 +436,32 @@ impl TryFrom<&str> for Replacement<Subject> {
       to: Subject::from(replacement.to.as_str()),
     })
   }
+}
+
+impl TryFrom<&str> for Replacement<Vec<String>> {
+  type Error = anyhow::Error;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    let replacement: Replacement<String> = TryFrom::try_from(value)?;
+    Ok(Replacement {
+      from: replacement.from.split(',').map(|value| value.trim().to_string()).collect::<Vec<String>>(),
+      to: replacement.to.split(',').map(|value| value.trim().to_string()).collect::<Vec<String>>(),
+    })
+  }
+}
+
+/// Removes starting `(` and ending `)` characters.
+fn clean(value: &str) -> &str {
+  let mut value = value.trim();
+
+  if value.starts_with('(') && value.ends_with(')') {
+    return &value[1..value.len() - 1];
+  }
+
+  value
+}
+
+/// Convert raw lesson to block lesson
+fn convert_lesson(lesson: u8) -> u8 {
+  (lesson + lesson % 2) / 2
 }
