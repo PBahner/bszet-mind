@@ -53,11 +53,11 @@ pub enum Subject {
 impl From<&str> for Subject {
   fn from(value: &str) -> Self {
     match value {
-      "GK-DEU" => Self::GermanBasic,
+      "DEU" => Self::GermanBasic,
       "LK-DEU" => Self::GermanAdvanced,
-      "GK-MA" => Self::MathBasic,
+      "MA" => Self::MathBasic,
       "LK-MA" => Self::MathAdvanced,
-      "GK-ENG" => Self::EnglishBasic,
+      "ENG" => Self::EnglishBasic,
       "LK-ENG" => Self::EnglishAdvanced,
       "BK" => Self::Art,
       "GGK" => Self::History,
@@ -85,11 +85,11 @@ impl From<&str> for Subject {
 impl Display for Subject {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::GermanBasic => f.write_str("GK-D"),
+      Self::GermanBasic => f.write_str("D"),
       Self::GermanAdvanced => f.write_str("LK-D"),
-      Self::MathBasic => f.write_str("GK-Ma"),
+      Self::MathBasic => f.write_str("Ma"),
       Self::MathAdvanced => f.write_str("LK-Ma"),
-      Self::EnglishBasic => f.write_str("GK-En"),
+      Self::EnglishBasic => f.write_str("En"),
       Self::EnglishAdvanced => f.write_str("LK-En"),
       Self::Art => f.write_str("BK"),
       Self::History => f.write_str("Ge"),
