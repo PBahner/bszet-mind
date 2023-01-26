@@ -1,3 +1,4 @@
+use std::ops::Not;
 use std::string::ToString;
 use std::time::Duration;
 
@@ -18,10 +19,10 @@ mod ascii;
 #[command(author, version, about, long_about)]
 struct Args {
   #[arg(
-    long,
-    short,
-    env = "BSZET_MIND_ENTRYPOINT",
-    default_value = "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/V_DC_001.html"
+  long,
+  short,
+  env = "BSZET_MIND_ENTRYPOINT",
+  default_value = "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/V_DC_001.html"
   )]
   entrypoint: Url,
   #[arg(long, short, env = "BSZET_MIND_USERNAME")]
@@ -57,7 +58,6 @@ async fn main() -> anyhow::Result<()> {
         } else {
           info!("Nothing changed");
         }
-
       }
       Ok(true) => {
         info!("Detected changes, sending notifications...");
@@ -83,33 +83,30 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
     _ => {}
   }
 
-  let table = table(davinci.get_applied_timetable(now.date()).await);
+  let (day, unknown_changes) = davinci.get_applied_timetable(now.date()).await;
+  let table = table(day);
 
   let telegram = Telegram::new(&args.telegram_token)?;
 
   for id in &args.chat_ids {
-    match davinci.data().await.as_ref() {
-      None => {
-        telegram
-          .send(
-            *id,
-            "Es konnte kein Vertretungsplan geladen werden.".to_string(),
-          )
-          .await?
-      }
-      Some(data) => {
-        // let age = OffsetDateTime::now_utc() - data.last_checked;
-        let text = format!(
-          "Vertretungsplan für {} den {}. {} {}.\n```\n{}```",
-          now.weekday(),
-          now.day(),
-          now.month(),
-          now.year(),
-          table
-        );
-        telegram.send(*id, text).await?;
+    // let age = OffsetDateTime::now_utc() - data.last_checked;
+    let mut text = format!(
+      "Vertretungsplan für {} den {}. {} {}.\n```\n{}```",
+      now.weekday(),
+      now.day(),
+      now.month(),
+      now.year(),
+      table
+    );
+
+    if !unknown_changes.is_empty() {
+      writeln!(text, "\n\nÄnderungen, die nicht angewendet werden konnten:").unwrap();
+      for row in &unknown_changes {
+        writeln!(text, "- {:?}", row).unwrap();
       }
     }
+
+    telegram.send(*id, text).await?;
   }
 
   Ok(())
@@ -133,3 +130,4 @@ async fn await_next_execution() {
   );
   tokio::time::sleep_until(sleep_until).await;
 }
+use std::fmt::Write;

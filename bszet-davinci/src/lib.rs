@@ -55,7 +55,7 @@ impl Davinci {
     self.data.read().await
   }
 
-  pub async fn get_applied_timetable(&self, date: Date) -> Vec<Lesson> {
+  pub async fn get_applied_timetable(&self, date: Date) -> (Vec<Lesson>, Vec<Row>) {
     let iteration = match get_iteration(date) {
       None => panic!("Unable to find iteration for date {}", date),
       Some(iteration) => iteration,
@@ -75,6 +75,8 @@ impl Davinci {
       })
       .collect::<Vec<Lesson>>();
 
+    let mut relevant_rows = Vec::new();
+
     if let Some(data) = self.data.read().await.as_ref() {
       for row in &data.rows {
         if row.date != date || !(row.class.contains(&"IGD21".to_string()) || row.class.contains(&"IGD 21".to_string())) {
@@ -82,6 +84,7 @@ impl Davinci {
         }
 
         println!("{:?}", row);
+        let mut applyed = false;
 
         for mut lesson in &mut day {
           if lesson.lesson == row.lesson {
@@ -101,6 +104,7 @@ impl Davinci {
                 // sanity checks??
                 lesson.subject = Subject::Cancel(Box::new(lesson.subject.clone()));
                 lesson.notice = row.notice.clone();
+                applyed = true;
               }
               Change::PlaceChange {
                 subject,
@@ -113,6 +117,7 @@ impl Davinci {
                 // sanity checks?? place.from
                 lesson.place = Some(place.to.clone());
                 lesson.notice = row.notice.clone();
+                applyed = true;
               }
               Change::Addition {
                 subject,
@@ -126,6 +131,7 @@ impl Davinci {
                   place: place.clone(),
                   notice: row.notice.clone(),
                 });
+                applyed = true;
               }
               Change::Replacement {
                 subject,
@@ -140,28 +146,23 @@ impl Davinci {
                 lesson.subject = subject.to.clone();
                 lesson.place = Some(place.to.clone());
                 lesson.notice = row.notice.clone();
+                applyed = true;
               }
-              Change::Other {
-                value,
-                subject,
-                teacher,
-                place,
-              } => {
-                lesson.notice = Some(match &row.notice {
-                  None => format!("Other: {}", value),
-                  Some(notice) => format!("Other: {} - {}", value, notice),
-                });
-              }
+              Change::Other { value, subject, teacher, place } => {}
             }
             break;
           }
+        }
+
+        if !applyed {
+          relevant_rows.push(row.clone());
         }
 
         break;
       }
     }
 
-    day
+    (day, relevant_rows)
   }
 
   pub async fn update(&self) -> anyhow::Result<bool> {
