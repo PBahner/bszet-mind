@@ -1,5 +1,3 @@
-use std::ops::Not;
-use std::string::ToString;
 use std::time::Duration;
 
 use clap::Parser;
@@ -19,10 +17,10 @@ mod ascii;
 #[command(author, version, about, long_about)]
 struct Args {
   #[arg(
-  long,
-  short,
-  env = "BSZET_MIND_ENTRYPOINT",
-  default_value = "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/V_DC_001.html"
+    long,
+    short,
+    env = "BSZET_MIND_ENTRYPOINT",
+    default_value = "https://geschuetzt.bszet.de/s-lk-vw/Vertretungsplaene/V_PlanBGy/V_DC_001.html"
   )]
   entrypoint: Url,
   #[arg(long, short, env = "BSZET_MIND_USERNAME")]

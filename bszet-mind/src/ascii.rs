@@ -41,7 +41,7 @@ pub fn table(day: Vec<Lesson>) -> String {
         s,
         " ".repeat(subject_w - s.len()),
         p.as_ref().unwrap_or(&"".to_string()),
-        " ".repeat(place_w - p.as_ref().map(|s|s.len()).unwrap_or(0)),
+        " ".repeat(place_w - p.as_ref().map(|s| s.len()).unwrap_or(0)),
         notice
       )
       .unwrap();

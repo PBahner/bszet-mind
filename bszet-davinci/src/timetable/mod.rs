@@ -62,7 +62,6 @@ impl From<&str> for Subject {
       "BK" => Self::Art,
       "GGK" => Self::History,
       "F-B" => Self::French,
-      "DEU" => Self::GermanBasic,
       "ETH" => Self::Ethics,
       "R-B" => Self::Russian,
       "CH" => Self::Chemistry,
@@ -76,8 +75,8 @@ impl From<&str> for Subject {
       "LF 11" => Self::Lf11,
 
       "_fä.verb." => Self::FaeVerb,
-"" => Self::None,
-      other =>         Self::Other(other.to_string())
+      "" => Self::None,
+      other => Self::Other(other.to_string()),
     }
   }
 }
@@ -114,7 +113,7 @@ impl Display for Subject {
       Self::Other(other) => {
         warn!("Unknown subject: {}", other);
         f.write_str(other)
-      },
+      }
     }
   }
 }
