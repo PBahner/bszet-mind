@@ -19,7 +19,7 @@ type Day = Vec<Lesson>;
 
 type Timetable = HashMap<Weekday, Day>;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Subject {
   GermanBasic,
   GermanAdvanced,

@@ -1,5 +1,6 @@
 extern crate core;
 
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -38,7 +39,7 @@ pub struct Davinci {
 pub struct Data {
   pub last_checked: OffsetDateTime,
   pub last_modified: OffsetDateTime,
-  pub rows: Vec<Row>,
+  pub rows: HashSet<Row>,
 }
 
 impl Davinci {
@@ -167,8 +168,6 @@ impl Davinci {
         if !applyed {
           relevant_rows.push(row.clone());
         }
-
-        break;
       }
     }
 
@@ -190,9 +189,15 @@ impl Davinci {
 
     let mut data = self.data.write().await;
 
+    let mut hash = HashSet::with_capacity(rows.len());
+    for row in rows {
+      hash.insert(row);
+    }
+
     // check if there is a difference
     if let Some(data) = data.as_mut() {
-      if !rows.iter().zip(&data.rows).any(|(a, b)| a != b) {
+      // if !hash.iter().zip(&data.rows).any(|(a, b)| a != b) {
+      if hash == data.rows {
         data.last_checked = now;
         return Ok(false);
       }
@@ -201,7 +206,7 @@ impl Davinci {
     *data = Some(Data {
       last_checked: now,
       last_modified: now,
-      rows,
+      rows: hash,
     });
 
     Ok(true)
@@ -334,7 +339,7 @@ impl Davinci {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Row {
   pub date: Date,
   pub class: Vec<String>,
@@ -343,7 +348,7 @@ pub struct Row {
   pub notice: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Change {
   Cancel {
     subject: Subject,
@@ -378,7 +383,7 @@ pub enum Change {
   },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Replacement<T> {
   pub from: T,
   pub to: T,
