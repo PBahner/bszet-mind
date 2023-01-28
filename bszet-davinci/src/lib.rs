@@ -1,28 +1,34 @@
 extern crate core;
 
 use std::collections::HashSet;
-use std::str::FromStr;
+use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 
 use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::header::LAST_MODIFIED;
 use reqwest::{Client, Url};
+use sailfish::TemplateOnce;
 use select::document::Document;
-use select::predicate::Name;
 use time::format_description::well_known::Rfc2822;
-use time::{Date, Month, OffsetDateTime};
+use time::{Date, OffsetDateTime};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::info;
 
+use change::Change;
+
+use crate::extractor::{extract_date, extract_html_table, extract_next_page, parse};
+use crate::html::SubstitutionPlanTemplate;
 use crate::iteration::get_iteration;
 use crate::timetable::igd21::IGD21;
-use crate::timetable::{Lesson, Subject};
+use crate::timetable::Lesson;
 
-const DATE_REGEX: Lazy<Regex> =
-  Lazy::new(|| Regex::new("\\S+ (\\d{2})\\.(\\d{2})\\.(\\d{4})").unwrap());
-const REPLACEMENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("\\+(.*) \\((.+)\\)").unwrap());
+static REPLACEMENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("\\+(.*) \\((.+)\\)").unwrap());
 
+mod change;
+mod extractor;
+mod html;
 mod iteration;
 #[cfg(test)]
 mod test;
@@ -59,7 +65,7 @@ impl Davinci {
 
   pub async fn get_applied_timetable(&self, date: Date) -> (Vec<Lesson>, Vec<Row>) {
     let iteration = match get_iteration(date) {
-      None => panic!("Unable to find iteration for date {}", date),
+      None => panic!("Unable to find iteration for date {date}"),
       Some(iteration) => iteration,
     };
 
@@ -88,84 +94,7 @@ impl Davinci {
           continue;
         }
 
-        println!("{:?}", row);
-        let mut applyed = false;
-
-        for mut lesson in &mut day {
-          if lesson.lesson == row.lesson {
-            match &row.change {
-              Change::Cancel {
-                subject,
-                teacher,
-                place,
-              }
-              | Change::ClassIsMissing {
-                subject,
-                teacher,
-                place,
-              } => {
-                if &lesson.subject != subject {
-                  continue;
-                };
-                // sanity checks??
-                lesson.subject = Subject::Cancel(Box::new(lesson.subject.clone()));
-                lesson.notice = row.notice.clone();
-                applyed = true;
-              }
-              Change::PlaceChange {
-                subject,
-                teacher,
-                place,
-              } => {
-                if &lesson.subject != subject {
-                  continue;
-                };
-                // sanity checks?? place.from
-                lesson.place = Some(place.to.clone());
-                lesson.notice = row.notice.clone();
-                applyed = true;
-              }
-              Change::Addition {
-                subject,
-                teacher,
-                place,
-              } => {
-                day.push(Lesson {
-                  lesson: row.lesson,
-                  subject: subject.clone(),
-                  iteration: None,
-                  place: place.clone(),
-                  notice: row.notice.clone(),
-                });
-                applyed = true;
-              }
-              Change::Replacement {
-                subject,
-                teacher,
-                place,
-              } => {
-                if lesson.subject != subject.from {
-                  continue;
-                };
-                // sanity checks?? place.from
-
-                lesson.subject = subject.to.clone();
-                lesson.place = Some(place.to.clone());
-                lesson.notice = row.notice.clone();
-                applyed = true;
-              }
-              Change::Other {
-                value,
-                subject,
-                teacher,
-                place,
-              } => {}
-            }
-            break;
-          }
-        }
-
-        if !applyed {
+        if !row.change.apply(&mut day) {
           relevant_rows.push(row.clone());
         }
       }
@@ -174,14 +103,43 @@ impl Davinci {
     (day, relevant_rows)
   }
 
+  pub async fn get_html(&self, date: &Date, classes: &[&str]) -> anyhow::Result<Option<String>> {
+    Ok(match self.data.read().await.as_ref() {
+      None => None,
+      Some(data) => {
+        let mut table = data
+          .rows
+          .iter()
+          .filter(|row| &row.date == date)
+          .collect::<Vec<&Row>>();
+
+        table.sort_by(|a, b| a.index.cmp(&b.index));
+
+        let table = table
+          .iter()
+          .map(|row| row.raw.as_slice())
+          .collect::<Vec<&[String]>>();
+
+        Some(
+          SubstitutionPlanTemplate {
+            date: *date,
+            table,
+            classes,
+          }
+          .render_once()?,
+        )
+      }
+    })
+  }
+
   pub async fn update(&self) -> anyhow::Result<bool> {
-    let mut url = self.entrypoint.clone();
+    let mut start_url = self.entrypoint.clone();
     let mut rows = Vec::new();
 
     loop {
-      match self.fetch(url, &mut rows).await? {
+      match self.fetch(start_url, &mut rows).await? {
         None => break,
-        Some(next) => url = next,
+        Some(next) => start_url = next,
       };
     }
 
@@ -229,280 +187,51 @@ impl Davinci {
     info!("Crawled {}, last modified {}", url, last_modified);
 
     let text = response.text().await?;
-    let document = Document::from(text.as_str());
+    let doc = Document::from(text.as_str());
 
-    let mut date = None;
-    for node in document.find(Name("h1")) {
-      if let Some(captures) = DATE_REGEX.captures(&node.text()) {
-        let day = u8::from_str(captures.get(1).unwrap().as_str()).unwrap();
-        let month = u8::from_str(captures.get(2).unwrap().as_str()).unwrap();
-        let year = i32::from_str(captures.get(3).unwrap().as_str()).unwrap();
+    let date = extract_date(&doc)?;
 
-        date = Some(Date::from_calendar_date(
-          year,
-          Month::try_from(month)?,
-          day,
-        )?);
-      }
-    }
+    let table = extract_html_table(&doc);
+    parse(table, &date, rows)?;
 
-    let date = if let Some(date) = date {
-      date
-    } else {
-      return Err(anyhow!("Missing date in document"));
-    };
-
-    let table = if let Some(table) = document.find(Name("tbody")).next() {
-      table
-    } else {
-      return Err(anyhow!("Missing time table in document"));
-    };
-
-    for row in table.find(Name("tr")) {
-      let columns = row
-        .find(Name("td"))
-        .map(|data| {
-          let text = data.text();
-          let column = clean(&text);
-          column.to_string()
-        })
-        .collect::<Vec<String>>();
-
-      if columns.len() != 7 {
-        panic!("Invalid count of columns");
-      }
-
-      let class = if columns[0].is_empty() {
-        None
-      } else {
-        Some(
-          columns[0]
-            .split(',')
-            .map(|value| value.trim().to_string())
-            .collect::<Vec<String>>(),
-        )
-      };
-
-      let lesson = if columns[1].is_empty() {
-        None
-      } else {
-        Some(convert_lesson(
-          u8::from_str(&columns[1][..columns[1].len() - 1]).unwrap(),
-        ))
-      };
-
-      let change = Change::new(
-        &columns[5],
-        columns[2].as_str(),
-        columns[3].to_string(),
-        &columns[4],
-      )?;
-      let notice = if columns[6].is_empty() {
-        None
-      } else {
-        Some(columns[6].to_string())
-      };
-
-      let row = if let Some(last) = rows.last() {
-        Row {
-          date,
-          class: class.unwrap_or_else(|| last.class.clone()),
-          lesson: lesson.unwrap_or(last.lesson),
-          change,
-          notice,
+    Ok(match extract_next_page(&doc) {
+      None => None,
+      Some(next) => {
+        let next = url.join(next)?;
+        if next == url {
+          None
+        } else {
+          Some(next)
         }
-      } else {
-        Row {
-          date,
-          class: class.expect("First row, can not have missing fields."),
-          lesson: lesson.expect("First row, can not have missing fields."),
-          change,
-          notice,
-        }
-      };
-
-      rows.push(row);
-    }
-
-    if let Some(js) = document
-      .find(Name("input"))
-      .filter_map(|input| input.attr("onclick"))
-      .last()
-    {
-      let next = self.entrypoint.join(&js[22..js.len() - 1])?;
-      if next != url {
-        return Ok(Some(next));
       }
-    }
-
-    Ok(None)
+    })
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct Row {
+  /// IF YOU ADD PROPERTIES, UPDATE IMPLEMENTATIONS BELOW
+  // ignored for Eq, PartialEq and Hash
+  pub index: u8,
   pub date: Date,
   pub class: Vec<String>,
-  pub lesson: u8,
   pub change: Change,
-  pub notice: Option<String>,
+  // ignored for Eq, PartialEq and Hash
+  pub raw: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Change {
-  Cancel {
-    subject: Subject,
-    teacher: Vec<String>,
-    place: String,
-  },
-  PlaceChange {
-    subject: Subject,
-    teacher: Vec<String>,
-    place: Replacement<String>,
-  },
-  Addition {
-    subject: Subject,
-    teacher: Vec<String>,
-    place: Option<String>,
-  },
-  Replacement {
-    subject: Replacement<Subject>,
-    teacher: Replacement<Vec<String>>,
-    place: Replacement<String>,
-  },
-  ClassIsMissing {
-    subject: Subject,
-    teacher: Vec<String>,
-    place: String,
-  },
-  Other {
-    value: String,
-    subject: Subject,
-    teacher: Vec<String>,
-    place: String,
-  },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Replacement<T> {
-  pub from: T,
-  pub to: T,
-}
-
-impl Change {
-  fn new(value: &str, subject: &str, place: String, teacher: &str) -> anyhow::Result<Self> {
-    Ok(match value {
-      "Fällt aus" => Self::Cancel {
-        subject: subject.into(),
-        place,
-        teacher: teacher
-          .split(',')
-          .map(|s| s.trim().to_string())
-          .collect::<Vec<String>>(),
-      },
-      "Raumänderung" => Self::PlaceChange {
-        subject: subject.into(),
-        place: place.as_str().try_into()?,
-        teacher: teacher
-          .split(',')
-          .map(|s| s.trim().to_string())
-          .collect::<Vec<String>>(),
-      },
-      "Zusatzunterricht" => Self::Addition {
-        subject: subject.into(),
-        place: if place.is_empty() { None } else { Some(place) },
-        teacher: teacher
-          .split(',')
-          .map(|s| s.trim().to_string())
-          .collect::<Vec<String>>(),
-      },
-      "Vertreten" => Self::Replacement {
-        subject: subject.try_into()?,
-        place: place.as_str().try_into()?,
-        teacher: teacher.try_into()?,
-      },
-      "Klasse fehlt" => Self::ClassIsMissing {
-        subject: subject.into(),
-        place,
-        teacher: teacher
-          .split(',')
-          .map(|s| s.trim().to_string())
-          .collect::<Vec<String>>(),
-      },
-      value => Self::Other {
-        value: value.to_string(),
-        subject: subject.into(),
-        place,
-        teacher: teacher
-          .split(',')
-          .map(|s| s.trim().to_string())
-          .collect::<Vec<String>>(),
-      },
-    })
+impl Hash for Row {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.date.hash(state);
+    self.class.hash(state);
+    self.change.hash(state);
   }
 }
 
-impl TryFrom<&str> for Replacement<String> {
-  type Error = anyhow::Error;
-
-  fn try_from(value: &str) -> Result<Self, Self::Error> {
-    match REPLACEMENT_REGEX
-      .captures(value)
-      .map(|capture| (capture.get(1), capture.get(2)))
-    {
-      Some((Some(to), Some(from))) => Ok(Replacement {
-        from: from.as_str().to_string(),
-        to: to.as_str().to_string(),
-      }),
-      _ => Err(anyhow!("can not parse replacement {}", value)),
-    }
+impl PartialEq<Self> for Row {
+  fn eq(&self, other: &Self) -> bool {
+    self.date == other.date && self.class == other.class && self.change == other.change
   }
 }
 
-impl TryFrom<&str> for Replacement<Subject> {
-  type Error = anyhow::Error;
-
-  fn try_from(value: &str) -> Result<Self, Self::Error> {
-    let replacement: Replacement<String> = TryFrom::try_from(value)?;
-    Ok(Replacement {
-      from: Subject::from(replacement.from.as_str()),
-      to: Subject::from(replacement.to.as_str()),
-    })
-  }
-}
-
-impl TryFrom<&str> for Replacement<Vec<String>> {
-  type Error = anyhow::Error;
-
-  fn try_from(value: &str) -> Result<Self, Self::Error> {
-    let replacement: Replacement<String> = TryFrom::try_from(value)?;
-    Ok(Replacement {
-      from: replacement
-        .from
-        .split(',')
-        .map(|value| value.trim().to_string())
-        .collect::<Vec<String>>(),
-      to: replacement
-        .to
-        .split(',')
-        .map(|value| value.trim().to_string())
-        .collect::<Vec<String>>(),
-    })
-  }
-}
-
-/// Removes starting `(` and ending `)` characters.
-fn clean(value: &str) -> &str {
-  let value = value.trim();
-
-  if value.starts_with('(') && value.ends_with(')') {
-    return &value[1..value.len() - 1];
-  }
-
-  value
-}
-
-/// Convert raw lesson to block lesson
-fn convert_lesson(lesson: u8) -> u8 {
-  (lesson + lesson % 2) / 2
-}
+impl Eq for Row {}
