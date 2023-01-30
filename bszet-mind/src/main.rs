@@ -155,7 +155,7 @@ async fn plan(
     davinci
       .get_html(&date, split.as_slice())
       .await?
-      .ok_or_else(|| PlanUnavailable)?,
+      .ok_or(PlanUnavailable)?,
   ))
 }
 

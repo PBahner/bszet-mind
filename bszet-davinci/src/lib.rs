@@ -14,7 +14,7 @@ use select::document::Document;
 use time::format_description::well_known::Rfc2822;
 use time::{Date, OffsetDateTime};
 use tokio::sync::{RwLock, RwLockReadGuard};
-use tracing::info;
+use tracing::{error, info};
 
 use change::Change;
 
@@ -94,9 +94,16 @@ impl Davinci {
           continue;
         }
 
-        if !row.change.apply(&mut day) {
-          relevant_rows.push(row.clone());
+        match row.change.apply(&mut day) {
+          Ok(applied) => {
+            if applied {
+              continue;
+            }
+          }
+          Err(err) => error!("Could not apply row: {}", err),
         }
+
+        relevant_rows.push(row.clone());
       }
     }
 

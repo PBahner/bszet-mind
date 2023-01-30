@@ -39,7 +39,7 @@ pub(crate) fn parse(
         date: *date,
         class: class.unwrap_or_else(|| last.class.clone()),
         change: Change::new(
-          lesson.unwrap_or(last.change.lesson()),
+          lesson.unwrap_or_else(|| last.change.lesson()),
           type_of_change,
           subject,
           place,

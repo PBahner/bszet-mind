@@ -52,7 +52,7 @@ pub enum Change {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Replacement<T> {
-  pub from: T,
+  pub from: Option<T>,
   pub to: T,
 }
 
@@ -128,8 +128,8 @@ impl Change {
   }
 
   /// Apples the change for the provided day.
-  pub(crate) fn apply(&self, lessons: &mut Vec<Lesson>) -> bool {
-    match self {
+  pub(crate) fn apply(&self, lessons: &mut Vec<Lesson>) -> anyhow::Result<bool> {
+    Ok(match self {
       Change::Cancel {
         lesson,
         subject,
@@ -142,7 +142,7 @@ impl Change {
         notice,
         ..
       } => {
-        match find_lesson(lessons, lesson, subject) {
+        match find_lesson(lessons, lesson, Some(subject))? {
           None => false,
           Some(lesson) => {
             // TODO: place, teachers
@@ -159,7 +159,7 @@ impl Change {
         notice,
         ..
       } => {
-        match find_lesson(lessons, lesson, subject) {
+        match find_lesson(lessons, lesson, Some(subject))? {
           None => false,
           Some(lesson) => {
             // TODO: teachers, place.from
@@ -193,7 +193,7 @@ impl Change {
         notice,
         ..
       } => {
-        match find_lesson(lessons, lesson, &subject.from) {
+        match find_lesson(lessons, lesson, subject.from.as_ref())? {
           None => false,
           Some(lesson) => {
             // TODO: teachers, place.from
@@ -205,7 +205,7 @@ impl Change {
         }
       }
       Change::Other { .. } => false,
-    }
+    })
   }
 
   pub(crate) fn lesson(&self) -> u8 {
@@ -223,11 +223,27 @@ impl Change {
 fn find_lesson<'a>(
   lessons: &'a mut [Lesson],
   lesson: &u8,
-  subject: &Subject,
-) -> Option<&'a mut Lesson> {
-  lessons
+  subject: Option<&Subject>,
+) -> anyhow::Result<Option<&'a mut Lesson>> {
+  let lessons = lessons
     .iter_mut()
-    .find(|l| &l.lesson == lesson && &l.subject == subject)
+    .filter(|l| &l.lesson == lesson)
+    .collect::<Vec<&mut Lesson>>();
+
+  match subject {
+    None => {
+      if lessons.len() == 1 {
+        Ok(lessons.into_iter().next())
+      } else {
+        Err(anyhow!("Found multiple subjects without original value to clearly identify lesson. less: {}, subjs: {:?}",lesson , lessons))
+      }
+    }
+    Some(subject) => Ok(
+      lessons
+        .into_iter()
+        .find(|lesson| &lesson.subject == subject),
+    ),
+  }
 }
 
 impl TryFrom<&str> for Replacement<String> {
@@ -239,10 +255,13 @@ impl TryFrom<&str> for Replacement<String> {
       .map(|capture| (capture.get(1), capture.get(2)))
     {
       Some((Some(to), Some(from))) => Ok(Replacement {
-        from: from.as_str().to_string(),
+        from: Some(from.as_str().to_string()),
         to: to.as_str().to_string(),
       }),
-      _ => Err(anyhow!("can not parse replacement {}", value)),
+      _ => Ok(Replacement {
+        from: None,
+        to: value.to_string(),
+      }),
     }
   }
 }
@@ -253,7 +272,7 @@ impl TryFrom<&str> for Replacement<Subject> {
   fn try_from(value: &str) -> Result<Self, Self::Error> {
     let replacement: Replacement<String> = TryFrom::try_from(value)?;
     Ok(Replacement {
-      from: Subject::from(replacement.from.as_str()),
+      from: replacement.from.map(|value| Subject::from(value.as_str())),
       to: Subject::from(replacement.to.as_str()),
     })
   }
@@ -265,11 +284,12 @@ impl TryFrom<&str> for Replacement<Vec<String>> {
   fn try_from(value: &str) -> Result<Self, Self::Error> {
     let replacement: Replacement<String> = TryFrom::try_from(value)?;
     Ok(Replacement {
-      from: replacement
-        .from
-        .split(',')
-        .map(|value| value.trim().to_string())
-        .collect::<Vec<String>>(),
+      from: replacement.from.map(|value| {
+        value
+          .split(',')
+          .map(|value| value.trim().to_string())
+          .collect::<Vec<String>>()
+      }),
       to: replacement
         .to
         .split(',')
