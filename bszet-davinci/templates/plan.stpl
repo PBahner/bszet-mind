@@ -55,7 +55,7 @@
     </head>
     <body>
         <h1>
-            <%= format!("{} der {:0<2}. {} {}", date.weekday(), date.day(), date.month(), date.year()) %>
+            <%= format!("{} der {:0>2}. {} {}", date.weekday(), date.day(), date.month(), date.year()) %>
         </h1>
         <table>
             <tr>
