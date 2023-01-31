@@ -18,6 +18,8 @@ use time::serde::format_description;
 use time::{Date, OffsetDateTime, Weekday};
 use tokio::time::Instant;
 use tracing::{error, info};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use bszet_davinci::Davinci;
 use bszet_image::WebToImageConverter;
@@ -69,12 +71,27 @@ struct Args {
     default_value = "http://127.0.0.1:8080"
   )]
   internal_url: Url,
+  #[arg(long, short, env = "BSZET_MIND_SENTRY_DSN")]
+  sentry_dsn: Url,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   let args = Args::parse();
-  tracing_subscriber::fmt::init();
+
+  let _guard = sentry::init((
+    args.sentry_dsn.as_str(),
+    sentry::ClientOptions {
+      release: sentry::release_name!(),
+      traces_sample_rate: 1.0,
+      ..Default::default()
+    },
+  ));
+
+  tracing_subscriber::registry()
+    .with(tracing_subscriber::fmt::layer())
+    .with(sentry_tracing::layer())
+    .init();
 
   let davinci = Arc::new(Davinci::new(
     args.entrypoint.clone(),
@@ -106,6 +123,10 @@ async fn main() -> anyhow::Result<()> {
   Server::bind(&args.listen_addr)
     .serve(router.into_make_service())
     .await?;
+
+  if let Some(client) = sentry::Hub::current().client() {
+    client.close(Some(Duration::from_secs(2)));
+  }
 
   Ok(())
 }
