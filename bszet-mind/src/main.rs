@@ -4,20 +4,21 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::{body, Extension, Router, Server};
 use axum::body::{Empty, Full};
 use axum::extract::{Path, Query};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
-use axum::{body, Extension, Router, Server};
 use clap::{arg, Parser};
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use reqwest::Url;
 use serde::Deserialize;
-use time::serde::format_description;
 use time::{Date, OffsetDateTime, Weekday};
+use time::serde::format_description;
 use tokio::time::Instant;
-use tracing::{error, info};
+use tracing::{error, info, Level};
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -25,8 +26,8 @@ use bszet_davinci::Davinci;
 use bszet_image::WebToImageConverter;
 use bszet_notify::telegram::Telegram;
 
-use crate::ascii::table;
 use crate::AppError::PlanUnavailable;
+use crate::ascii::table;
 
 mod ascii;
 
@@ -89,7 +90,11 @@ async fn main() -> anyhow::Result<()> {
   ));
 
   tracing_subscriber::registry()
-    .with(tracing_subscriber::fmt::layer())
+    .with(
+      tracing_subscriber::fmt::Layer::new()
+        .with_writer(std::io::stdout.with_max_level(Level::INFO))
+        .compact(),
+    )
     .with(sentry_tracing::layer())
     .init();
 
