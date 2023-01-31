@@ -11,6 +11,8 @@ use reqwest::header::LAST_MODIFIED;
 use reqwest::{Client, Url};
 use sailfish::TemplateOnce;
 use select::document::Document;
+use sentry::protocol::Event;
+use sentry::types::Uuid;
 use time::format_description::well_known::Rfc2822;
 use time::{Date, OffsetDateTime};
 use tokio::sync::{RwLock, RwLockReadGuard};
@@ -101,6 +103,18 @@ impl Davinci {
             }
           }
           Err(err) => error!("Could not apply row: {}", err),
+        }
+
+        {
+          let uuid = Uuid::new_v4();
+          let event = Event {
+            event_id: uuid,
+            message: Some(format!("Unable to apply change: {:?}", row)),
+            level: sentry::protocol::Level::Warning,
+            ..Default::default()
+          };
+
+          sentry::capture_event(event);
         }
 
         relevant_rows.push(row.clone());
