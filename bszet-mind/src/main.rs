@@ -1,22 +1,26 @@
 use std::collections::HashSet;
 use std::fmt::Write;
+use std::iter::once;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::{Empty, Full};
-use axum::extract::{Path, Query};
+use axum::extract::Path;
+use axum::http::header::AUTHORIZATION;
 use axum::http::{header, HeaderValue, StatusCode};
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{body, Extension, Router, Server};
 use clap::{arg, Parser};
 use include_dir::{include_dir, Dir};
 use reqwest::Url;
-use serde::Deserialize;
-use time::serde::format_description;
 use time::{Date, OffsetDateTime, Weekday};
+use tokio::select;
 use tokio::time::Instant;
+use tower_http::auth::RequireAuthorizationLayer;
+use tower_http::sensitive_headers::SetSensitiveRequestHeadersLayer;
+use tower_http::trace::TraceLayer;
 use tracing::{error, info, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
@@ -26,9 +30,10 @@ use bszet_davinci::Davinci;
 use bszet_image::WebToImageConverter;
 use bszet_notify::telegram::Telegram;
 
+use crate::api::davinci::{html_plan, timetable};
 use crate::ascii::table;
-use crate::AppError::PlanUnavailable;
 
+mod api;
 mod ascii;
 
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/static");
@@ -68,12 +73,20 @@ struct Args {
   #[arg(
     long,
     short,
+    env = "BSZET_MIND_INTERNAL_LISTEN_ADDR",
+    default_value = "127.0.0.1:8081"
+  )]
+  internal_listen_addr: SocketAddr,
+  #[arg(
+    long,
     env = "BSZET_MIND_INTERNAL_URL",
-    default_value = "http://127.0.0.1:8080"
+    default_value = "http://127.0.0.1:8081"
   )]
   internal_url: Url,
   #[arg(long, short, env = "BSZET_MIND_SENTRY_DSN")]
   sentry_dsn: Url,
+  #[arg(long, env = "BSZET_MIND_API_TOKEN")]
+  api_token: String,
 }
 
 #[tokio::main]
@@ -98,6 +111,16 @@ async fn main() -> anyhow::Result<()> {
     .with(sentry_tracing::layer())
     .init();
 
+  let result = real_main(args).await;
+
+  if let Some(client) = sentry::Hub::current().client() {
+    client.close(Some(Duration::from_secs(2)));
+  }
+
+  result
+}
+
+async fn real_main(args: Args) -> anyhow::Result<()> {
   let davinci = Arc::new(Davinci::new(
     args.entrypoint.clone(),
     args.username.clone(),
@@ -106,12 +129,19 @@ async fn main() -> anyhow::Result<()> {
 
   let args2 = args.clone();
   let davinci2 = davinci.clone();
-  let davinci3 = davinci.clone();
 
   let router = Router::new()
-    .route("/davinci/:date", get(plan))
+    .route("/davinci/:date/:class", get(timetable))
+    .layer(Extension(davinci2.clone()))
+    .layer(RequireAuthorizationLayer::bearer(&args.api_token))
+    .layer(SetSensitiveRequestHeadersLayer::new(once(AUTHORIZATION)))
+    .layer(TraceLayer::new_for_http());
+
+  let internal_router = Router::new()
+    .route("/davinci/:date", get(html_plan))
     .route("/static/*path", get(static_path))
-    .layer(Extension(davinci3));
+    .layer(Extension(davinci2.clone()))
+    .layer(TraceLayer::new_for_http());
 
   tokio::spawn(async move {
     let args2 = args2;
@@ -124,13 +154,18 @@ async fn main() -> anyhow::Result<()> {
   });
 
   info!("Listening on http://{}...", args.listen_addr);
+  info!(
+    "Listening on http://{}... (internal)",
+    args.internal_listen_addr
+  );
 
-  Server::bind(&args.listen_addr)
-    .serve(router.into_make_service())
-    .await?;
-
-  if let Some(client) = sentry::Hub::current().client() {
-    client.close(Some(Duration::from_secs(2)));
+  select! {
+    public = Server::bind(&args.listen_addr).serve(router.into_make_service()) => {
+      public?;
+    }
+    internal = Server::bind(&args.internal_listen_addr).serve(internal_router.into_make_service()) => {
+      internal?;
+    }
   }
 
   Ok(())
@@ -158,31 +193,6 @@ async fn static_path(Path(path): Path<String>) -> impl IntoResponse {
       .body(body::boxed(Full::from(file.contents())))
       .unwrap(),
   }
-}
-format_description!(iso_date, Date, "[year]-[month]-[day]");
-#[derive(Deserialize)]
-struct PlanPath {
-  #[serde(with = "iso_date")]
-  date: Date,
-}
-
-#[derive(Deserialize)]
-struct PlanQuery {
-  class: String,
-}
-
-async fn plan(
-  Extension(davinci): Extension<Arc<Davinci>>,
-  Path(PlanPath { date }): Path<PlanPath>,
-  Query(PlanQuery { class }): Query<PlanQuery>,
-) -> Result<impl IntoResponse, AppError> {
-  let split = class.split(',').collect::<Vec<&str>>();
-  Ok(Html(
-    davinci
-      .get_html(&date, split.as_slice())
-      .await?
-      .ok_or(PlanUnavailable)?,
-  ))
 }
 
 async fn iteration(args: &Args, davinci: &Davinci) -> anyhow::Result<()> {
@@ -327,32 +337,4 @@ async fn await_next_execution() {
     now_sec_to_next_15_prec % 60,
   );
   tokio::time::sleep_until(sleep_until).await;
-}
-
-enum AppError {
-  InternalServerError(anyhow::Error),
-  PlanUnavailable,
-}
-
-impl From<anyhow::Error> for AppError {
-  fn from(inner: anyhow::Error) -> Self {
-    AppError::InternalServerError(inner)
-  }
-}
-
-impl IntoResponse for AppError {
-  fn into_response(self) -> Response {
-    let (status, error_message) = match self {
-      AppError::InternalServerError(inner) => {
-        error!("stacktrace: {}", inner);
-        (StatusCode::INTERNAL_SERVER_ERROR, "something went wrong")
-      }
-      AppError::PlanUnavailable => (
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "substitution plan is currently unavailable",
-      ),
-    };
-
-    (status, error_message).into_response()
-  }
 }
