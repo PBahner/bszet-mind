@@ -109,7 +109,7 @@ impl Davinci {
           let uuid = Uuid::new_v4();
           let event = Event {
             event_id: uuid,
-            message: Some(format!("Unable to apply change: {:?}", row)),
+            message: Some(format!("Unable to apply change: {row:?}")),
             level: sentry::protocol::Level::Warning,
             ..Default::default()
           };

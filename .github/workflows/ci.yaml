@@ -108,8 +108,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Gather environment
+        run: |
+          if [[ "${{ startsWith(github.ref, 'refs/tags/') }}" -eq "false" ]]; then
+             echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+          fi
+
       - name: Build
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           file: Dockerfile
           platforms: linux/amd64
@@ -118,6 +124,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
+          build-args: ENVIRONMENT=${{ env.ENVIRONMENT }}
 
       - name: Move cache
         run: |

@@ -83,7 +83,7 @@ impl From<&str> for Subject {
           let uuid = Uuid::new_v4();
           let event = Event {
             event_id: uuid,
-            message: Some(format!("Unknown subject: {:?}", other)),
+            message: Some(format!("Unknown subject: {other:?}")),
             level: sentry::protocol::Level::Info,
             ..Default::default()
           };
@@ -133,7 +133,7 @@ impl Display for Subject {
           let uuid = Uuid::new_v4();
           let event = Event {
             event_id: uuid,
-            message: Some(format!("Tried to apply unknown subject: {:?}", other)),
+            message: Some(format!("Tried to apply unknown subject: {other:?}")),
             level: sentry::protocol::Level::Warning,
             ..Default::default()
           };

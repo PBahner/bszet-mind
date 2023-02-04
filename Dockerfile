@@ -17,11 +17,14 @@ RUN cargo build --release --bin bszet-mind
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bullseye-slim AS runtime
 
+ARG ENVIRONMENT
+
 ENV USER=bszet-mind
 ENV UID=10001
 
 ENV BSZET_MIND_LISTEN_ADDR=0.0.0.0:8080
 ENV BSZET_MIND_INTERNAL_LISTEN_ADDR=0.0.0.0:8081
+ENV BSZET_MIND_ENVIRONMENT=${ENVIRONMENT}
 
 RUN adduser \
     --disabled-password \

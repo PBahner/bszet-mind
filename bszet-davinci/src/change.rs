@@ -121,7 +121,7 @@ impl Change {
         let uuid = Uuid::new_v4();
         let event = Event {
           event_id: uuid,
-          message: Some(format!("Unkown type of change: {:?}", change)),
+          message: Some(format!("Unkown type of change: {change:?}")),
           level: sentry::protocol::Level::Info,
           ..Default::default()
         };

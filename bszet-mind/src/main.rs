@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::iter::once;
@@ -87,6 +88,8 @@ struct Args {
   sentry_dsn: Url,
   #[arg(long, env = "BSZET_MIND_API_TOKEN")]
   api_token: String,
+  #[arg(long, env = "BSZET_MIND_ENVIRONMENT")]
+  environment: Option<String>,
 }
 
 #[tokio::main]
@@ -98,6 +101,11 @@ async fn main() -> anyhow::Result<()> {
     sentry::ClientOptions {
       release: sentry::release_name!(),
       traces_sample_rate: 1.0,
+      environment: args
+        .environment
+        .as_ref()
+        .filter(|env| !env.is_empty())
+        .map(|env| Cow::from(env.to_string())),
       ..Default::default()
     },
   ));
