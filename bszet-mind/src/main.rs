@@ -19,9 +19,9 @@ use reqwest::Url;
 use time::{Date, OffsetDateTime, Weekday};
 use tokio::select;
 use tokio::time::Instant;
-use tower_http::auth::RequireAuthorizationLayer;
 use tower_http::sensitive_headers::SetSensitiveRequestHeadersLayer;
 use tower_http::trace::TraceLayer;
+use tower_http::validate_request::ValidateRequestHeaderLayer;
 use tracing::{error, info, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
@@ -141,7 +141,7 @@ async fn real_main(args: Args) -> anyhow::Result<()> {
   let router = Router::new()
     .route("/davinci/:date/:class", get(timetable))
     .layer(Extension(davinci2.clone()))
-    .layer(RequireAuthorizationLayer::bearer(&args.api_token))
+    .layer(ValidateRequestHeaderLayer::bearer(&args.api_token))
     .layer(SetSensitiveRequestHeadersLayer::new(once(AUTHORIZATION)))
     .layer(TraceLayer::new_for_http());
 

@@ -5,7 +5,7 @@ version = "0.0.0-git"
 edition = "2021"
 
 [dependencies]
-tower-http = { version = "0.4", features = ["sensitive-headers", "auth", "trace"], default-features = false }
+tower-http = { version = "0.4", features = ["sensitive-headers", "trace", "validate-request", "auth"], default-features = false }
 tokio = { version = "1.26", default-features = false, features = ["macros", "rt-multi-thread", "signal"] }
 axum = { version = "0.6", features = ["tokio", "query", "json"], default-features = false }
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
