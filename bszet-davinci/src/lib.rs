@@ -65,7 +65,7 @@ impl Davinci {
     self.data.read().await
   }
 
-  pub async fn get_applied_timetable(&self, date: Date) -> (Vec<Lesson>, Vec<Row>) {
+  pub async fn get_applied_timetable(&self, date: Date) -> (Vec<Lesson>, Vec<Row>, u8) {
     let iteration = match get_iteration(date) {
       None => panic!("Unable to find iteration for date {date}"),
       Some(iteration) => iteration,
@@ -121,7 +121,7 @@ impl Davinci {
       }
     }
 
-    (day, relevant_rows)
+    (day, relevant_rows, iteration)
   }
 
   pub async fn get_html(&self, date: &Date, classes: &[&str]) -> anyhow::Result<Option<String>> {

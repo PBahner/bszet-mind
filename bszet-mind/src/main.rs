@@ -241,7 +241,7 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
     _ => {}
   }
 
-  let (day, unknown_changes) = davinci.get_applied_timetable(now.date()).await;
+  let (day, unknown_changes, iteration) = davinci.get_applied_timetable(now.date()).await;
   let table = table(day);
 
   let telegram = Telegram::new(&args.telegram_token)?;
@@ -257,11 +257,12 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
   for id in &args.chat_ids {
     // let age = OffsetDateTime::now_utc() - data.last_checked;
     let mut text = format!(
-      "Vertretungsplan für {} den {}. {} {}.\n```\n{}```",
+      "Vertretungsplan für {} den {}. {} {}, Turnus {}.\n```\n{}```",
       now.weekday(),
       now.day(),
       now.month(),
       now.year(),
+      iteration,
       table,
     );
 
