@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};

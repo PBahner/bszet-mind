@@ -17,28 +17,28 @@ pub enum Change {
     subject: Subject,
     teachers: Vec<String>,
     place: String,
-    notice: Option<String>,
+    notice: String,
   },
   PlaceChange {
     lesson: u8,
     subject: Subject,
     teachers: Vec<String>,
     place: Replacement<String>,
-    notice: Option<String>,
+    notice: String,
   },
   Addition {
     lesson: u8,
     subject: Subject,
     teachers: Vec<String>,
     place: Option<String>,
-    notice: Option<String>,
+    notice: String,
   },
   Replacement {
     lesson: u8,
     subject: Replacement<Subject>,
     teachers: Replacement<Vec<String>>,
     place: Replacement<String>,
-    notice: Option<String>,
+    notice: String,
   },
   Other {
     lesson: u8,
@@ -46,7 +46,7 @@ pub enum Change {
     subject: Subject,
     teachers: Vec<String>,
     place: String,
-    notice: Option<String>,
+    notice: String,
   },
 }
 
@@ -75,7 +75,7 @@ impl Change {
             .split(',')
             .map(|s| s.trim().to_string())
             .collect::<Vec<String>>(),
-          notice,
+          notice: notice.unwrap_or(value.to_string()),
         }
       }
       "Raumänderung" => Self::PlaceChange {
@@ -86,7 +86,7 @@ impl Change {
           .split(',')
           .map(|s| s.trim().to_string())
           .collect::<Vec<String>>(),
-        notice,
+        notice: notice.unwrap_or(value.to_string()),
       },
       "Zusatzunterricht" => Self::Addition {
         lesson,
@@ -96,14 +96,14 @@ impl Change {
           .split(',')
           .map(|s| s.trim().to_string())
           .collect::<Vec<String>>(),
-        notice,
+        notice: notice.unwrap_or(value.to_string()),
       },
       toc if toc == "Vertreten" || MOVED_FROM_REGEX.is_match(toc) => Self::Replacement {
         lesson,
         subject: subject.try_into()?,
         place: place.as_str().try_into()?,
         teachers: teacher.try_into()?,
-        notice,
+        notice: notice.unwrap_or(value.to_string()),
       },
       toc => {
         let change = Self::Other {
@@ -115,7 +115,7 @@ impl Change {
             .split(',')
             .map(|s| s.trim().to_string())
             .collect::<Vec<String>>(),
-          notice,
+          notice: notice.unwrap_or(value.to_string()),
         };
 
         let uuid = Uuid::new_v4();
@@ -146,7 +146,7 @@ impl Change {
           Some(lesson) => {
             // TODO: place, teachers
             lesson.subject = Subject::Cancel(Box::new(subject.clone()));
-            lesson.notice = notice.as_ref().map(|string| string.to_string());
+            lesson.notice = Some(notice.to_string());
             true
           }
         }
@@ -163,7 +163,7 @@ impl Change {
           Some(lesson) => {
             // TODO: teachers, place.from
             lesson.place = Some(place.to.to_string());
-            lesson.notice = notice.as_ref().map(|string| string.to_string());
+            lesson.notice = Some(notice.to_string());
             true
           }
         }
@@ -181,7 +181,7 @@ impl Change {
           subject: subject.clone(),
           iteration: None,
           place: place.as_ref().map(|string| string.to_string()),
-          notice: notice.as_ref().map(|string| string.to_string()),
+          notice: Some(notice.to_string()),
         });
         true
       }
@@ -198,7 +198,7 @@ impl Change {
             // TODO: teachers, place.from
             lesson.subject = subject.to.clone();
             lesson.place = Some(place.to.to_string());
-            lesson.notice = notice.as_ref().map(|string| string.to_string());
+            lesson.notice = Some(notice.to_string());
             true
           }
         }
