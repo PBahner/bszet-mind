@@ -74,6 +74,7 @@ impl From<&str> for Subject {
       "LIT" => Self::Literature,
 
       "LF 6+7+9" => Self::Lf6_7_9,
+      "IS-GP" => Self::Lf6_7_9,
       "LF8D_I1" => Self::Lf8,
       "LF8D_I2" => Self::Lf8,
       "LF10D_I1" => Self::Lf10,
