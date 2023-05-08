@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 tower-http = { version = "0.4", features = ["sensitive-headers", "trace", "validate-request", "auth"], default-features = false }
-tokio = { version = "1.27", default-features = false, features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1.28", default-features = false, features = ["macros", "rt-multi-thread", "signal"] }
 axum = { version = "0.6", features = ["tokio", "query", "json"], default-features = false }
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 reqwest = { version = "0.11", default-features = false }
@@ -20,5 +20,5 @@ include_dir = "0.7"
 tracing = "0.1"
 anyhow = "1.0"
 
-sentry = { version = "0.30", features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "rustls", "tower"], default-features = false }
-sentry-tracing = "0.30"
+sentry = { version = "0.31", features = ["backtrace", "contexts", "panic", "anyhow", "reqwest", "rustls", "tower"], default-features = false }
+sentry-tracing = "0.31"
