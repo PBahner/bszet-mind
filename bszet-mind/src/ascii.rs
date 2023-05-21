@@ -12,11 +12,13 @@ pub fn table(day: Vec<Lesson>) -> String {
     let s = format!("{}", lesson.subject);
     let p = &lesson.place;
 
-    lesson_w = lesson_w.max(l.len());
-    subject_w = subject_w.max(s.len());
-    place_w = place_w.max(p.as_ref().map(|s| s.len()).unwrap_or(0));
+    lesson_w = lesson_w.max(l.chars().count());
+    subject_w = subject_w.max(s.chars().count());
+    place_w = place_w.max(p.as_ref().map(|s| s.chars().count()).unwrap_or(0));
   }
 
+  // only works with ascii characters, with utf like ü, ä, ö, ß, ...
+  // there will be an additional allocation
   let mut out = String::with_capacity(day.len() * (lesson_w + subject_w + place_w + 2));
 
   let mut first = true;
@@ -37,11 +39,11 @@ pub fn table(day: Vec<Lesson>) -> String {
         out,
         "{}{} {}{} {}{} {}",
         l,
-        " ".repeat(lesson_w - l.len()),
+        " ".repeat(lesson_w - l.chars().count()),
         s,
-        " ".repeat(subject_w - s.len()),
+        " ".repeat(subject_w - s.chars().count()),
         p.as_ref().unwrap_or(&"".to_string()),
-        " ".repeat(place_w - p.as_ref().map(|s| s.len()).unwrap_or(0)),
+        " ".repeat(place_w - p.as_ref().map(|s| s.chars().count()).unwrap_or(0)),
         notice
       )
       .unwrap();
@@ -50,9 +52,9 @@ pub fn table(day: Vec<Lesson>) -> String {
         out,
         "{}{} {}{} {}",
         l,
-        " ".repeat(lesson_w - l.len()),
+        " ".repeat(lesson_w - l.chars().count()),
         s,
-        " ".repeat(subject_w - s.len()),
+        " ".repeat(subject_w - s.chars().count()),
         p.as_ref().unwrap_or(&"".to_string())
       )
       .unwrap();
