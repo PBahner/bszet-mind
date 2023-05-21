@@ -246,7 +246,7 @@ impl Eq for Row {}
 
 fn apply_change(
   date: &Date,
-  mut day: &mut Vec<Lesson>,
+  day: &mut Vec<Lesson>,
   relevant_rows: &mut Vec<Row>,
   row: &Row,
 ) -> bool {
@@ -256,7 +256,7 @@ fn apply_change(
     return true;
   }
 
-  match row.change.apply(&mut day) {
+  match row.change.apply(day) {
     Ok(applied) => {
       if applied {
         return true;
