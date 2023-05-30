@@ -37,6 +37,9 @@ use crate::ascii::table;
 mod api;
 mod ascii;
 
+#[cfg(test)]
+mod tests;
+
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/static");
 
 #[derive(Parser, Clone)]
@@ -241,7 +244,8 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
     _ => {}
   }
 
-  let (day, unknown_changes, iteration) = davinci.get_applied_timetable(now.date()).await;
+  let (last_modified, day, unknown_changes, iteration) =
+    davinci.get_applied_timetable(now.date()).await;
   let table = table(day);
 
   let telegram = Telegram::new(&args.telegram_token)?;
@@ -255,14 +259,18 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
   };
 
   for id in &args.chat_ids {
-    // let age = OffsetDateTime::now_utc() - data.last_checked;
+    let age = last_modified
+      .map(|last_modified| (OffsetDateTime::now_utc() - last_modified).unsigned_abs())
+      .unwrap_or_else(|| Duration::from_secs(0));
+
     let mut text = format!(
-      "Vertretungsplan für {} den {}. {} {}, Turnus {}.\n```\n{}```",
+      "Vertretungsplan für {} den {}. {} {}, Turnus {}. Zuletzt vor {} aktualisiert.\n```\n{}```",
       now.weekday(),
       now.day(),
       now.month(),
       now.year(),
       iteration,
+      format_duration(age),
       table,
     );
 
@@ -346,4 +354,47 @@ async fn await_next_execution() {
     now_sec_to_next_15_prec % 60,
   );
   tokio::time::sleep_until(sleep_until).await;
+}
+
+fn format_duration(duration: Duration) -> String {
+  let secs = duration.as_secs();
+
+  let units = [
+    ("einem Jahr", "Jahren", 31_557_600),
+    ("einem Monat", "Monaten", 2_630_016),
+    ("einem Tag", "Tagen", 86400),
+    ("einer Stunde", "Stunden", 3600),
+    ("einer Minute", "Minuten", 60),
+    ("einer Sekunde", "Sekunden", 1),
+  ];
+
+  let mut last = None;
+  let mut last_remaining = secs;
+
+  for (one, many, seconds) in units {
+    let value = last_remaining / seconds;
+    let remaining = last_remaining % seconds;
+
+    if value != 0 {
+      if let Some(last) = last {
+        return format!(
+          "{} und {}",
+          last,
+          match value {
+            1 => one.to_string(),
+            value => format!("{value} {many}"),
+          }
+        );
+      } else {
+        last = Some(match value {
+          1 => one.to_string(),
+          value => format!("{value} {many}"),
+        });
+      }
+    }
+
+    last_remaining = remaining;
+  }
+
+  last.unwrap_or_else(|| "idk".to_string())
 }

@@ -44,7 +44,7 @@ pub struct Davinci {
 
 pub struct Data {
   pub last_checked: OffsetDateTime,
-  pub last_modified: OffsetDateTime,
+  pub last_modified: Option<OffsetDateTime>,
   pub rows: HashSet<Row>,
 }
 
@@ -63,7 +63,10 @@ impl Davinci {
     self.data.read().await
   }
 
-  pub async fn get_applied_timetable(&self, date: Date) -> (Vec<Lesson>, Vec<Row>, u8) {
+  pub async fn get_applied_timetable(
+    &self,
+    date: Date,
+  ) -> (Option<OffsetDateTime>, Vec<Lesson>, Vec<Row>, u8) {
     let iteration = match get_iteration(date) {
       None => panic!("Unable to find iteration for date {date}"),
       Some(iteration) => iteration,
@@ -85,7 +88,10 @@ impl Davinci {
 
     let mut relevant_rows = Vec::new();
 
+    let mut last_modified = None;
     if let Some(data) = self.data.read().await.as_ref() {
+      last_modified = data.last_modified;
+
       // first ally all cancel
       // sometimes there is a cancel and than a replacement for the canceled lesson
       for row in &data.rows {
@@ -108,7 +114,7 @@ impl Davinci {
       }
     }
 
-    (day, relevant_rows, iteration)
+    (last_modified, day, relevant_rows, iteration)
   }
 
   pub async fn get_html(&self, date: &Date, classes: &[&str]) -> anyhow::Result<Option<String>> {
@@ -143,11 +149,22 @@ impl Davinci {
   pub async fn update(&self) -> anyhow::Result<bool> {
     let mut start_url = self.entrypoint.clone();
     let mut rows = Vec::new();
+    let mut last_modified = None;
 
     loop {
       match self.fetch(start_url, &mut rows).await? {
         None => break,
-        Some(next) => start_url = next,
+        Some((curr_last_modified, next)) => {
+          if let Some(last_last_modified) = last_modified {
+            if last_last_modified < curr_last_modified {
+              last_modified = Some(curr_last_modified);
+            }
+          } else {
+            last_modified = Some(curr_last_modified);
+          }
+
+          start_url = next
+        }
       };
     }
 
@@ -171,14 +188,18 @@ impl Davinci {
 
     *data = Some(Data {
       last_checked: now,
-      last_modified: now,
+      last_modified,
       rows: hash,
     });
 
     Ok(true)
   }
 
-  async fn fetch(&self, url: Url, rows: &mut Vec<Row>) -> anyhow::Result<Option<Url>> {
+  async fn fetch(
+    &self,
+    url: Url,
+    rows: &mut Vec<Row>,
+  ) -> anyhow::Result<Option<(OffsetDateTime, Url)>> {
     let response = self
       .client
       .get(url.clone())
@@ -209,7 +230,7 @@ impl Davinci {
         if next == url {
           None
         } else {
-          Some(next)
+          Some((last_modified, next))
         }
       }
     })
