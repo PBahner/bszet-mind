@@ -62,6 +62,7 @@ pub(crate) async fn timetable(
     davinci
       .get_applied_timetable(date)
       .await
+      .ok_or_else(|| AppError::IterationNotAvailable)?
       .1
       .into_iter()
       .map(|lesson| {

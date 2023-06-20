@@ -245,7 +245,7 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
   }
 
   let (last_modified, day, unknown_changes, iteration) =
-    davinci.get_applied_timetable(now.date()).await;
+    davinci.get_applied_timetable(now.date()).await.unwrap();
   let table = table(day);
 
   let telegram = Telegram::new(&args.telegram_token)?;

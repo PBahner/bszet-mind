@@ -7,6 +7,7 @@ pub(crate) mod davinci;
 pub(crate) enum AppError {
   InternalServerError(anyhow::Error),
   PlanUnavailable,
+  IterationNotAvailable,
 }
 
 impl From<anyhow::Error> for AppError {
@@ -25,6 +26,10 @@ impl IntoResponse for AppError {
       AppError::PlanUnavailable => (
         StatusCode::SERVICE_UNAVAILABLE,
         "substitution plan is currently unavailable",
+      ),
+      AppError::IterationNotAvailable => (
+        StatusCode::BAD_REQUEST,
+        "iteration for given date not available",
       ),
     };
 
