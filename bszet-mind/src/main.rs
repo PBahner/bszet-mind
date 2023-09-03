@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use axum::body::{Empty, Full};
 use axum::extract::Path;
 use axum::http::header::AUTHORIZATION;
@@ -207,23 +208,31 @@ async fn static_path(Path(path): Path<String>) -> impl IntoResponse {
 }
 
 async fn iteration(args: &Args, davinci: &Davinci) -> anyhow::Result<()> {
-  match davinci.update().await {
-    Err(err) => error!("Error executing davinci update schedule: {}", err),
+  let result = match davinci.update().await {
+    Err(err) => Err(anyhow!(format!(
+      "Error executing davinci update schedule: {}",
+      err
+    ))),
     Ok(false) => {
       let now = OffsetDateTime::now_utc();
 
       if now.hour() == 15 && now.minute() <= 14 {
-        send_notifications(args, davinci).await?;
         info!("Send 15 o'clock notification");
+        send_notifications(args, davinci).await
       } else {
         info!("Nothing changed");
+        Ok(())
       }
     }
     Ok(true) => {
       info!("Detected changes, sending notifications...");
 
-      send_notifications(args, davinci).await?;
+      send_notifications(args, davinci).await
     }
+  };
+
+  if let Err(err) = result {
+    error!("Unable to execute iteration: {:?}", err);
   }
 
   await_next_execution().await;
@@ -245,7 +254,8 @@ async fn send_notifications(args: &Args, davinci: &Davinci) -> anyhow::Result<()
   }
 
   let (last_modified, day, unknown_changes, iteration) =
-    davinci.get_applied_timetable(now.date()).await.unwrap();
+    davinci.get_applied_timetable(now.date()).await?;
+
   let table = table(day);
 
   let telegram = Telegram::new(&args.telegram_token)?;

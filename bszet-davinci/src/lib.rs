@@ -14,7 +14,7 @@ use sentry::types::Uuid;
 use time::format_description::well_known::Rfc2822;
 use time::{Date, OffsetDateTime};
 use tokio::sync::{RwLock, RwLockReadGuard};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use change::Change;
 
@@ -66,14 +66,9 @@ impl Davinci {
   pub async fn get_applied_timetable(
     &self,
     date: Date,
-  ) -> Option<(Option<OffsetDateTime>, Vec<Lesson>, Vec<Row>, u8)> {
-    let iteration = match get_iteration(date) {
-      None => {
-        warn!("Unable to find iteration for date {date}");
-        return None;
-      }
-      Some(iteration) => iteration,
-    };
+  ) -> anyhow::Result<(Option<OffsetDateTime>, Vec<Lesson>, Vec<Row>, u8)> {
+    let iteration =
+      get_iteration(date).ok_or_else(|| anyhow!("Unable to find iteration for date {date}"))?;
 
     let mut day = IGD21
       .get(&date.weekday())
@@ -117,7 +112,7 @@ impl Davinci {
       }
     }
 
-    Some((last_modified, day, relevant_rows, iteration))
+    Ok((last_modified, day, relevant_rows, iteration))
   }
 
   pub async fn get_html(&self, date: &Date, classes: &[&str]) -> anyhow::Result<Option<String>> {
