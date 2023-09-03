@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-bookworm AS chef
 WORKDIR /bszet-mind
 
 FROM chef AS planner
@@ -15,7 +15,7 @@ COPY . .
 RUN cargo build --release --bin bszet-mind
 
 # We do not need the Rust toolchain to run the binary!
-FROM debian:bullseye-slim AS runtime
+FROM debian:bookworm-slim AS runtime
 
 ARG ENVIRONMENT
 
