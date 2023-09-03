@@ -212,6 +212,114 @@ pub(crate) fn get_iteration(date: Date) -> Option<u8> {
     (Date::from_calendar_date(2023, Month::June, 19).unwrap(), 1),
     (Date::from_calendar_date(2023, Month::June, 26).unwrap(), 2),
     (Date::from_calendar_date(2023, Month::July, 3).unwrap(), 1),
+    // SUMMER HOLIDAYS 2023 🌴
+    (
+      Date::from_calendar_date(2023, Month::August, 21).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::August, 28).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::September, 4).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::September, 11).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::September, 18).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::September, 25).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::October, 16).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::October, 23).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::October, 30).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::November, 6).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::November, 13).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::November, 20).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::November, 27).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::December, 4).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::December, 11).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2023, Month::December, 18).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::January, 1).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::January, 8).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::January, 15).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::January, 22).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::January, 29).unwrap(),
+      1,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::February, 5).unwrap(),
+      2,
+    ),
+    (
+      Date::from_calendar_date(2024, Month::February, 26).unwrap(),
+      1,
+    ),
+    (Date::from_calendar_date(2024, Month::March, 4).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::March, 11).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::March, 18).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::March, 25).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::April, 8).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::April, 15).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::April, 22).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::April, 29).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::May, 6).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::May, 13).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::May, 20).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::May, 27).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::June, 3).unwrap(), 2),
+    (Date::from_calendar_date(2024, Month::June, 10).unwrap(), 1),
+    (Date::from_calendar_date(2024, Month::June, 17).unwrap(), 2),
   ]);
 
   for i in 0..7i64 {
